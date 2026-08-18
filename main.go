@@ -1,3 +1,4 @@
+// main package to implements kvs server
 package main
 
 import (
@@ -10,6 +11,6 @@ func main() {
 
 	store := InMemoryMapStore{}
 
-	s := newHttpServer(store)
-	s.serveHttp(*port)
+	s := newHTTPServer(store)
+	s.serveHTTP(*port)
 }
