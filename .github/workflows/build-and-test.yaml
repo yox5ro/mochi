@@ -38,7 +38,7 @@ jobs:
       - name: setup-go
         uses: actions/setup-go@v7
         with:
-          go-version-file: 'go.mod
+          go-version-file: 'go.mod'
       
       - name: run test
         run: go test ./... -race -coverprofile=coverage.txt
