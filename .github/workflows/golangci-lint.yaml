@@ -3,7 +3,6 @@ on:
   push:
     branches:
       - main
-      - master
   pull_request:
 
 permissions:
@@ -16,10 +15,16 @@ jobs:
     name: lint
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-go@v6
+      - name: checkout
+        uses: actions/checkout@v7
         with:
-          go-version: stable
+          persist-credentials: false
+        
+      - name: setup-go
+        uses: actions/setup-go@v7
+        with:
+          go-version-file: 'go.mod'
+      
       - name: golangci-lint
         uses: golangci/golangci-lint-action@v9
         with:

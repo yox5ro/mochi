@@ -5,7 +5,6 @@ on:
   push:
     branches:
       - main
-      - master
   pull_request:
 
 jobs:
@@ -22,7 +21,12 @@ jobs:
         uses: actions/setup-go@v7
         with:
           go-version-file: 'go.mod'
-      
+
+      - name: check go.mod
+        run: |
+          go mod tidy
+          git diff --exit-code go.mod
+
       - name: build
         run: go build ./...
 
