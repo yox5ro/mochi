@@ -5,6 +5,7 @@ import (
 	"errors"
 	"log"
 	"net/http"
+	"strconv"
 )
 
 type request struct {
@@ -27,10 +28,10 @@ func newHTTPServer(store Store) httpServer {
 	return httpServer{store: store}
 }
 
-func (s httpServer) serveHTTP(port string) {
+func (s httpServer) serveHTTP(port int) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /", s.handleReq)
-	log.Fatal(http.ListenAndServe(port, mux))
+	log.Fatal(http.ListenAndServe(":"+strconv.Itoa(port), mux))
 }
 
 func (s httpServer) handleReq(w http.ResponseWriter, r *http.Request) {
