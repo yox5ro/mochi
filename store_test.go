@@ -16,20 +16,22 @@ func TestInMemoryMapStore_Get(t *testing.T) {
 		{
 			name: "can get by valid key",
 			initialState: map[string]string{
-				"hoge": "key",
+				"hoge": "value",
+				"fuga": "value2",
 			},
 			key:     "hoge",
-			want:    "key",
+			want:    "value",
 			wantErr: nil,
 		},
 		{
 			name: "returns empty string when no key found",
 			initialState: map[string]string{
-				"hoge": "key",
+				"hoge": "value",
+				"fuga": "value2",
 			},
-			key:     "",
+			key:     "foo",
 			want:    "",
-			wantErr: nil,
+			wantErr: errNotFound,
 		},
 	}
 
@@ -41,6 +43,53 @@ func TestInMemoryMapStore_Get(t *testing.T) {
 
 			if actual != tt.want {
 				t.Errorf("wanted %s, but got %s", tt.want, actual)
+			}
+
+			if !errors.Is(err, tt.wantErr) {
+				t.Errorf("wanted error %s, but got %s", tt.wantErr, err)
+			}
+		})
+	}
+}
+
+func TestInMemoryMapStore_Delete(t *testing.T) {
+	tests := []struct {
+		name         string
+		initialState map[string]string
+		key          string
+		want         string
+		wantErr      error
+	}{
+		{
+			name: "can get by valid key",
+			initialState: map[string]string{
+				"hoge": "value",
+				"fuga": "value2",
+			},
+			key:     "hoge",
+			want:    "value",
+			wantErr: nil,
+		},
+		{
+			name: "returns empty string when no key found",
+			initialState: map[string]string{
+				"hoge": "value",
+				"fuga": "value2",
+			},
+			key:     "foo",
+			want:    "",
+			wantErr: errNotFound,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			s := newInMemoryMapStore(tt.initialState)
+			err := s.delete(tt.key)
+
+			if data, err := s.get(tt.key); !errors.Is(err, errNotFound) {
+				t.Errorf("data still found on %s", data)
 			}
 
 			if !errors.Is(err, tt.wantErr) {
