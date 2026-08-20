@@ -1,5 +1,14 @@
 package main
 
+import (
+	"errors"
+	"fmt"
+)
+
+var (
+	errNotFound = errors.New("key not found")
+)
+
 type Store interface {
 	get(key string) (value string, err error)
 	put(key, value string) error
@@ -17,7 +26,10 @@ func newInMemoryMapStore(initialState map[string]string) InMemoryMapStore {
 }
 
 func (s InMemoryMapStore) get(key string) (string, error) {
-	return s.store[key], nil
+	if v, ok := s.store[key]; ok {
+		return v, nil
+	}
+	return "", fmt.Errorf("failed to get key %q: %w", key, errNotFound)
 }
 
 func (s InMemoryMapStore) put(key, value string) error {
@@ -26,6 +38,9 @@ func (s InMemoryMapStore) put(key, value string) error {
 }
 
 func (s InMemoryMapStore) delete(key string) error {
+	if _, ok := s.store[key]; !ok {
+		return fmt.Errorf("failed to delete key %q: %w", key, errNotFound)
+	}
 	delete(s.store, key)
 	return nil
 }
