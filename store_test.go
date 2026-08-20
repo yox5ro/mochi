@@ -52,22 +52,68 @@ func TestInMemoryMapStore_Get(t *testing.T) {
 	}
 }
 
-func TestInMemoryMapStore_Delete(t *testing.T) {
+func TestInMemoryMapStore_Put(t *testing.T) {
 	tests := []struct {
 		name         string
 		initialState map[string]string
 		key          string
-		want         string
+		value        string
 		wantErr      error
 	}{
 		{
-			name: "can get by valid key",
+			name: "can create new key",
+			initialState: map[string]string{
+				"hoge": "value",
+				"fuga": "value2",
+			},
+			key:     "foo",
+			value:   "bar",
+			wantErr: nil,
+		},
+		{
+			name: "can update existing key",
 			initialState: map[string]string{
 				"hoge": "value",
 				"fuga": "value2",
 			},
 			key:     "hoge",
-			want:    "value",
+			value:   "new value",
+			wantErr: nil,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			s := newInMemoryMapStore(tt.initialState)
+			err := s.put(tt.key, tt.value)
+			data, _ := s.get(tt.key)
+
+			if data != tt.value {
+				t.Errorf("wanted %s, but got %s", tt.value, data)
+			}
+
+			if !errors.Is(err, tt.wantErr) {
+				t.Errorf("wanted error %s, but got %s", tt.wantErr, err)
+			}
+		})
+	}
+}
+
+func TestInMemoryMapStore_Delete(t *testing.T) {
+	tests := []struct {
+		name         string
+		initialState map[string]string
+		key          string
+		wantErr      error
+	}{
+		{
+			name: "can delete by valid key",
+			initialState: map[string]string{
+				"hoge": "value",
+				"fuga": "value2",
+			},
+			key:     "hoge",
 			wantErr: nil,
 		},
 		{
@@ -77,7 +123,6 @@ func TestInMemoryMapStore_Delete(t *testing.T) {
 				"fuga": "value2",
 			},
 			key:     "foo",
-			want:    "",
 			wantErr: errNotFound,
 		},
 	}
