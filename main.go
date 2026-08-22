@@ -24,7 +24,7 @@ func main() {
 	port := flag.Int("port", 8080, "port to use")
 	flag.Parse()
 
-	store := InMemoryMapStore{}
+	store := newInMemoryMapStore(make(map[string]string))
 
 	printInitialMsg(*port)
 	s := newHTTPServer(store)

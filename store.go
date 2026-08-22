@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"maps"
 )
 
 var (
@@ -21,7 +22,13 @@ type InMemoryMapStore struct {
 
 func newInMemoryMapStore(initialState map[string]string) InMemoryMapStore {
 	inMemoryMapStore := InMemoryMapStore{}
-	inMemoryMapStore.store = initialState
+
+	s := maps.Clone(initialState)
+	if s == nil {
+		s = make(map[string]string)
+	}
+
+	inMemoryMapStore.store = s
 	return inMemoryMapStore
 }
 
