@@ -24,10 +24,6 @@ type httpServer struct {
 	store Store
 }
 
-func newHTTPServer(store Store) httpServer {
-	return httpServer{store: store}
-}
-
 func (s httpServer) serveHTTP(port int) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /", s.handleReq)

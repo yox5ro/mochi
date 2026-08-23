@@ -27,6 +27,6 @@ func main() {
 	store := newInMemoryMapStore(make(map[string]string))
 
 	printInitialMsg(*port)
-	s := newHTTPServer(store)
+	s := httpServer{store: store}
 	s.serveHTTP(*port)
 }
