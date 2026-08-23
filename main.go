@@ -4,6 +4,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"log"
 )
 
 func printInitialMsg(port int) {
@@ -28,5 +29,7 @@ func main() {
 
 	printInitialMsg(*port)
 	s := httpServer{store: store}
-	s.serveHTTP(*port)
+	if err := s.serveHTTP(*port); err != nil {
+		log.Fatal(err)
+	}
 }
