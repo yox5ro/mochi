@@ -1,5 +1,7 @@
 # Mochi
 
+[![codecov](https://codecov.io/gh/yox5ro/mochi/graph/badge.svg?token=FNPYYR374B)](https://codecov.io/gh/yox5ro/mochi)
+
 ## Overview
 
 Mochi is yet another KVS.  
