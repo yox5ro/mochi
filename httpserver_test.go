@@ -38,7 +38,7 @@ func TestHTTPServer_BuildMux(t *testing.T) {
 			method:         http.MethodGet,
 			wantStatusCode: http.StatusMethodNotAllowed,
 			wantEmptyBody:  true,
-			wantHeader:     map[string][]string{"Allow": []string{"POST"}},
+			wantHeader:     map[string][]string{"Allow": {"POST"}},
 		},
 	}
 
