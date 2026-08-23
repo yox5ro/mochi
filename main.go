@@ -4,6 +4,7 @@ package main
 import (
 	"flag"
 	"fmt"
+	"log"
 )
 
 func printInitialMsg(port int) {
@@ -27,6 +28,8 @@ func main() {
 	store := newInMemoryMapStore(make(map[string]string))
 
 	printInitialMsg(*port)
-	s := newHTTPServer(store)
-	s.serveHTTP(*port)
+	s := httpServer{store: store}
+	if err := s.serveHTTP(*port); err != nil {
+		log.Fatal(err)
+	}
 }

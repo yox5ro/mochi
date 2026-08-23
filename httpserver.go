@@ -24,14 +24,26 @@ type httpServer struct {
 	store Store
 }
 
-func newHTTPServer(store Store) httpServer {
-	return httpServer{store: store}
+func (s httpServer) buildMux() http.Handler {
+	mux := http.NewServeMux()
+	mux.HandleFunc("POST /{$}", s.handleReq)
+
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/" {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		if r.Method != "POST" {
+			w.Header().Set("Allow", "POST")
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		mux.ServeHTTP(w, r)
+	})
 }
 
-func (s httpServer) serveHTTP(port int) {
-	mux := http.NewServeMux()
-	mux.HandleFunc("POST /", s.handleReq)
-	log.Fatal(http.ListenAndServe(":"+strconv.Itoa(port), mux))
+func (s httpServer) serveHTTP(port int) error {
+	return http.ListenAndServe(":"+strconv.Itoa(port), s.buildMux())
 }
 
 func (s httpServer) handleReq(w http.ResponseWriter, r *http.Request) {
