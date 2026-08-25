@@ -7,6 +7,11 @@
 
 ## Development
 
+Hot reload
+```sh
+$ go tool air
+```
+
 Build
 ```sh
 $ go build
