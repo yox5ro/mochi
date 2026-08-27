@@ -34,128 +34,57 @@ Currently Mochi serves as HTTP server.
 $ mochi
 ```
 
-### HTTP status code
+### Request and response semantics
 
-404 if following condition is met:
-- request path is not `/`
-- response body will be empty
+All request must be directed to `/` with single `key` query parameter. `key` can accept empty string.  
+If any error happens, `Mochi-Error-Code` response header will be returned.  
+`Mochi-Error-Code` will be one of followings:
+- `key-invalid`: `key` is invalid
+- `key-not-found`: value of corresponding `key` is not found
+- `path-not-found`: request path is not `/`
+- `request-method-invalid`: request path is `/`, but request method is not one of the `GET`, `PUT`, `DELETE`. In this case, `Allow: GET, PUT, DELETE` header will also be returned
+- `internal`: any other internal error
 
-405 if following condition is met:
-- request path is `/` but HTTP method is not `POST`
-- response body will be empty
-
-400 if following conditions are all met:
-- request path is `/` and HTTP method is `POST`
-- request body is invalid JSON, or empty, or does not consist of exactly one JSON value, or has duplicate object member names
-- response body will be empty
-
-500 if following condition is met:
-- request path is `/` and HTTP method is `POST`
-- unexpected server error occurs
-- response body will be empty
-
-otherwise, 200.
-
-If valid JSON does not match any of get, put, delete request body format, 200 will be returned with following response body.
-
-```json
-{
-  "error": "string"
-}
-```
-
-### Endpoint
-
-All requests must be directed to the root path of the HTTP server (`/`).
+Response body will be empty unless successful get request
 
 ### Get request
 
-Request must be below format. Other fields than the format will be ignored.
-- `"op"` must be `"get"`
-- `"key"` allows empty string
-
-```json
-{
-  "op": "get",
-  "key": "string"
-}
-```
-
-When `key` is found, response will be below format
-
-```json
-{
-  "value": "string"
-}
-```
-
-When `key` is not found, `error` will be returned, since the client is explicitly requesting a value that does not exist.  
-When expected error happens or request does not satisfies the format (e.g. type mismatch, null value, missing field), `error` will be returned.
-
-```json
-{
-  "error": "string"
-}
-```
+Request must be directed to `GET /`.
+When `key` is found, corresponding byte sequence will be returned on response body.
+When `key` is not found, error will be returned as `Mochi-Error-Code: key-not-found` and status code will be 404, since the client is explicitly requesting a value that does not exist.  
 
 ### Put request
 
-Request must be below format. Other fields than the format will be ignored.
-- `"op"` must be `"put"`
-- `"key"` allows empty string
-- `"value"` allows empty string
-
-```json
-{
-  "op": "put",
-  "key": "string",
-  "value": "string"
-}
-```
-
-Regardless of existence of `key`, the value will be replaced (created) as `value`. 
-If the request is successful, empty object will be returned.
-
-```json
-{}
-```
-When expected error happens or request does not satisfies the format (e.g. type mismatch, null value, missing field), `error` will be returned.
-
-```json
-{
-  "error": "string"
-}
-```
+Request must be directed to `PUT /` with optional request body.
+If request body is empty, the value of corresponding key will be upserted to empty byte sequence, otherwise upserted to request body byte sequence.
 
 ### Delete request
 
-Request must be below format. Other fields than the format will be ignored.
-- `"op"` must be `"delete"`
-- `"key"` allows empty string
+Request must be directed to `DELETE /`.
+When `key` is found, `key` and corresponding value will be removed.  
+When `key` is not found, the status code will be 204, since the desired final state (key absent) is already achieved.  
 
-```json
-{
-  "op": "delete",
-  "key": "string"
-}
-```
+### HTTP status code
 
-When `key` is found, `key` and corresponding `value` will be removed.  
-When `key` is not found, `error` will not be returned, since the desired final state (key absent) is already achieved.  
-In both case, request are successful and empty object will be returned.
+404 if following condition is met:
+- any request failed with `path-not-found` error or get request failed with `key-not-found` error
 
+405 if following condition is met:
+- any request failed with `request-method-invalid` error
 
-```json
-{}
-```
+400 if following conditions are all met:
+- request path is `/` and HTTP method is one of `GET`, `PUT`, `DELETE`
+- request failed with `key-invalid` error
 
-When expected error happens or request does not satisfies the format (e.g. type mismatch, null value, missing field), `error` will be returned.
+500 if following conditions are all met:
+- request path is `/` and HTTP method is one of `GET`, `PUT`, `DELETE`
+- request failed with `internal` error
 
-```json
-{
-  "error": "string"
-}
-```
+204 if following conditions are all met
+- request path is `/` and HTTP method is one of `PUT`, `DELETE`
+- request is successful
+
+otherwise, 200.
 
 ## Concurrency
 
