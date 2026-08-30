@@ -1,10 +1,72 @@
 package main
 
 import (
+	"bytes"
 	"errors"
+	"maps"
 	"slices"
+	"strings"
 	"testing"
 )
+
+func TestInMemoryMapStore_NewInMemoryMapStore(t *testing.T) {
+	eqFunc := func(a, b []byte) bool {
+		return slices.Equal(a, b)
+	}
+	tests := []struct {
+		name         string
+		initialState map[string][]byte
+		want         InMemoryMapStore
+		wantErr      error
+	}{
+		{
+			name: "valid initialState returns no error",
+			initialState: map[string][]byte{
+				"key": []byte("value"),
+			},
+			want: InMemoryMapStore{store: map[string][]byte{
+				"key": []byte("value"),
+			}},
+			wantErr: nil,
+		},
+		{
+			name:         "can initialize with empty map",
+			initialState: make(map[string][]byte),
+			want:         InMemoryMapStore{store: make(map[string][]byte)},
+			wantErr:      nil,
+		},
+		{
+			name: "too long key returns error",
+			initialState: map[string][]byte{
+				strings.Repeat("a", MaxKeyLength+1): []byte("value"),
+			},
+			want:    InMemoryMapStore{},
+			wantErr: errKeyTooLarge,
+		},
+		{
+			name: "too long value returns error",
+			initialState: map[string][]byte{
+				"key": bytes.Repeat([]byte("a"), MaxValueLength+1),
+			},
+			want:    InMemoryMapStore{},
+			wantErr: errValueTooLarge,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := newInMemoryMapStore(tt.initialState)
+
+			if !maps.EqualFunc(got.store, tt.want.store, eqFunc) {
+				t.Errorf("want store %v, but got store %v", tt.want.store, got.store)
+			}
+
+			if !errors.Is(err, tt.wantErr) {
+				t.Errorf("want error %v, but got %v", tt.wantErr, err)
+			}
+		})
+	}
+}
 
 func TestInMemoryMapStore_Get(t *testing.T) {
 	tests := []struct {
@@ -34,12 +96,23 @@ func TestInMemoryMapStore_Get(t *testing.T) {
 			want:    nil,
 			wantErr: errNotFound,
 		},
+		{
+			name: "returns key-too-large error when key is too large",
+			initialState: map[string][]byte{
+				"hoge": []byte("value"),
+				"fuga": []byte("value2"),
+			},
+			key:     strings.Repeat("a", MaxKeyLength+1),
+			want:    nil,
+			wantErr: errKeyTooLarge,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			s := newInMemoryMapStore(tt.initialState)
+
+			s := mustNewInMemoryMapStore(t, tt.initialState)
 			actual, err := s.get(tt.key)
 
 			if !slices.Equal(actual, tt.want) {
@@ -81,16 +154,37 @@ func TestInMemoryMapStore_Put(t *testing.T) {
 			value:   []byte("new value"),
 			wantErr: nil,
 		},
+		{
+			name: "returns key-too-large error when key is too large",
+			initialState: map[string][]byte{
+				"hoge": []byte("value"),
+				"fuga": []byte("value2"),
+			},
+			key:     strings.Repeat("a", MaxKeyLength+1),
+			value:   []byte("new value"),
+			wantErr: errKeyTooLarge,
+		},
+		{
+			name: "returns value-too-large error when key is too large",
+			initialState: map[string][]byte{
+				"hoge": []byte("value"),
+				"fuga": []byte("value2"),
+			},
+			key:     "key",
+			value:   bytes.Repeat([]byte{'a'}, MaxValueLength+1),
+			wantErr: errValueTooLarge,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			s := newInMemoryMapStore(tt.initialState)
+
+			s := mustNewInMemoryMapStore(t, tt.initialState)
 			err := s.put(tt.key, tt.value)
 			data, _ := s.get(tt.key)
 
-			if !slices.Equal(data, tt.value) {
+			if tt.wantErr == nil && !slices.Equal(data, tt.value) {
 				t.Errorf("wanted %s, but got %s", tt.value, data)
 			}
 
@@ -126,15 +220,26 @@ func TestInMemoryMapStore_Delete(t *testing.T) {
 			key:     "foo",
 			wantErr: errNotFound,
 		},
+		{
+			name: "returns key-too-large error when key is too large",
+			initialState: map[string][]byte{
+				"hoge": []byte("value"),
+				"fuga": []byte("value2"),
+			},
+			key:     strings.Repeat("a", MaxKeyLength+1),
+			wantErr: errKeyTooLarge,
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			s := newInMemoryMapStore(tt.initialState)
+
+			s := mustNewInMemoryMapStore(t, tt.initialState)
 			err := s.delete(tt.key)
 
-			if data, err := s.get(tt.key); !errors.Is(err, errNotFound) {
+			shouldDataDeleted := tt.wantErr == nil || errors.Is(tt.wantErr, errNotFound)
+			if data, err := s.get(tt.key); shouldDataDeleted && !errors.Is(err, errNotFound) {
 				t.Errorf("data still found on %s", data)
 			}
 
@@ -153,7 +258,7 @@ func TestInMemoryMapStore_ValueOwnership(t *testing.T) {
 			"key": initialValue,
 		}
 
-		s := newInMemoryMapStore(initialState)
+		s := mustNewInMemoryMapStore(t, initialState)
 
 		initialState["key"][0] = 'X'
 
@@ -169,7 +274,7 @@ func TestInMemoryMapStore_ValueOwnership(t *testing.T) {
 	t.Run("get result change does not affect store", func(t *testing.T) {
 		const initialValueString = "initial value"
 		initialValue := []byte(initialValueString)
-		s := newInMemoryMapStore(map[string][]byte{
+		s := mustNewInMemoryMapStore(t, map[string][]byte{
 			"key": initialValue,
 		})
 
@@ -191,7 +296,7 @@ func TestInMemoryMapStore_ValueOwnership(t *testing.T) {
 	})
 
 	t.Run("change after put does not affect store", func(t *testing.T) {
-		s := newInMemoryMapStore(make(map[string][]byte))
+		s := mustNewInMemoryMapStore(t, make(map[string][]byte))
 
 		const putValueString = "put value"
 		putValue := []byte(putValueString)

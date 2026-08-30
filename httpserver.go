@@ -17,11 +17,9 @@ const (
 	headerValueKeyNotFound          = "key-not-found"
 	headerValuePathNotFound         = "path-not-found"
 	headerValueRequestMethodInvalid = "request-method-invalid"
+	headerValueKeyTooLarge          = "key-too-large"
 	headerValueValueTooLarge        = "value-too-large"
 	headerValueInternal             = "internal"
-
-	// TODO: consider max byte size at https://github.com/yox5ro/mochi/issues/39
-	MaxValueSize = 2048
 )
 
 var errKeyInvalid = errors.New("key invalid")
@@ -76,6 +74,10 @@ func (s httpServer) handleGetReq(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set(headerKeyMochiErrorCode, headerValueKeyNotFound)
 		w.WriteHeader(http.StatusNotFound)
 		return
+	case errors.Is(err, errKeyTooLarge):
+		w.Header().Set(headerKeyMochiErrorCode, headerValueKeyTooLarge)
+		w.WriteHeader(http.StatusBadRequest)
+		return
 	default:
 		w.Header().Set(headerKeyMochiErrorCode, headerValueInternal)
 		w.WriteHeader(http.StatusInternalServerError)
@@ -90,24 +92,31 @@ func (s httpServer) handlePutReq(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	body := http.MaxBytesReader(w, r.Body, MaxValueSize)
+	body := io.LimitReader(r.Body, MaxValueLength+1)
 	value, err := io.ReadAll(body)
-	if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
-		w.Header().Set(headerKeyMochiErrorCode, headerValueValueTooLarge)
-		w.WriteHeader(http.StatusRequestEntityTooLarge)
-		return
-	} else if err != nil {
+	if err != nil {
 		w.Header().Set(headerKeyMochiErrorCode, headerValueInternal)
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
-	if err := s.store.put(key, value); err != nil {
+	err = s.store.put(key, value)
+	switch {
+	case err == nil:
+		w.WriteHeader(http.StatusNoContent)
+		return
+	case errors.Is(err, errKeyTooLarge):
+		w.Header().Set(headerKeyMochiErrorCode, headerValueKeyTooLarge)
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	case errors.Is(err, errValueTooLarge):
+		w.Header().Set(headerKeyMochiErrorCode, headerValueValueTooLarge)
+		w.WriteHeader(http.StatusRequestEntityTooLarge)
+		return
+	default:
 		w.Header().Set(headerKeyMochiErrorCode, headerValueInternal)
 		w.WriteHeader(http.StatusInternalServerError)
-		return
 	}
-	w.WriteHeader(http.StatusNoContent)
 }
 
 func (s httpServer) handleDeleteReq(w http.ResponseWriter, r *http.Request) {
@@ -118,12 +127,19 @@ func (s httpServer) handleDeleteReq(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := s.store.delete(key); err == nil || errors.Is(err, errNotFound) {
+	err = s.store.delete(key)
+	switch {
+	case err == nil || errors.Is(err, errNotFound):
 		w.WriteHeader(http.StatusNoContent)
 		return
+	case errors.Is(err, errKeyTooLarge):
+		w.Header().Set(headerKeyMochiErrorCode, headerValueKeyTooLarge)
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	default:
+		w.Header().Set(headerKeyMochiErrorCode, headerValueInternal)
+		w.WriteHeader(http.StatusInternalServerError)
 	}
-	w.Header().Set(headerKeyMochiErrorCode, headerValueInternal)
-	w.WriteHeader(http.StatusInternalServerError)
 }
 
 func extractKey(r *http.Request) (string, error) {

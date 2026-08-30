@@ -3,10 +3,12 @@ package main
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"slices"
+	"strings"
 	"testing"
 )
 
@@ -78,9 +80,10 @@ func TestHTTPServer_BuildMux(t *testing.T) {
 			req := httptest.NewRequest(tt.method, tt.path, nil)
 			rec := httptest.NewRecorder()
 
-			server := httpServer{store: newInMemoryMapStore(map[string][]byte{
+			store := mustNewInMemoryMapStore(t, map[string][]byte{
 				"foo": []byte("bar"),
-			})}
+			})
+			server := httpServer{store: store}
 			server.buildMux().ServeHTTP(rec, req)
 
 			if rec.Code != tt.wantStatusCode {
@@ -162,6 +165,16 @@ func TestHTTPServer_HandleGetRequest(t *testing.T) {
 			},
 		},
 		{
+			name:           "too long key returns 400 and empty body",
+			path:           fmt.Sprintf("/?key=%s", strings.Repeat("a", MaxKeyLength+1)),
+			storeType:      success,
+			wantStatusCode: http.StatusBadRequest,
+			wantBody:       nil,
+			wantHeader: map[string][]string{
+				headerKeyMochiErrorCode: {headerValueKeyTooLarge},
+			},
+		},
+		{
 			name:           "internal server error returns 500 and empty response body",
 			path:           "/?key=foo",
 			storeType:      fail,
@@ -177,7 +190,7 @@ func TestHTTPServer_HandleGetRequest(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			successStore := newInMemoryMapStore(map[string][]byte{
+			successStore := mustNewInMemoryMapStore(t, map[string][]byte{
 				"foo": []byte("bar"),
 			})
 			failingStore := failingStore{}
@@ -225,7 +238,7 @@ func TestHTTPServer_HandlePutRequest(t *testing.T) {
 		{
 			name:           "valid key returns 204",
 			path:           "/?key=foo",
-			body:           bytes.Repeat([]byte("a"), MaxValueSize),
+			body:           bytes.Repeat([]byte("a"), MaxValueLength),
 			storeType:      success,
 			wantStatusCode: http.StatusNoContent,
 			wantHeader: map[string][]string{
@@ -253,9 +266,19 @@ func TestHTTPServer_HandlePutRequest(t *testing.T) {
 			},
 		},
 		{
+			name:           "too long key returns 400 and empty body",
+			path:           fmt.Sprintf("/?key=%s", strings.Repeat("a", MaxKeyLength+1)),
+			body:           nil,
+			storeType:      success,
+			wantStatusCode: http.StatusBadRequest,
+			wantHeader: map[string][]string{
+				headerKeyMochiErrorCode: {headerValueKeyTooLarge},
+			},
+		},
+		{
 			name:           "too large body returns 413",
 			path:           "/?key=foo",
-			body:           bytes.Repeat([]byte("a"), MaxValueSize+1),
+			body:           bytes.Repeat([]byte("a"), MaxValueLength+1),
 			storeType:      success,
 			wantStatusCode: http.StatusRequestEntityTooLarge,
 			wantHeader: map[string][]string{
@@ -278,7 +301,7 @@ func TestHTTPServer_HandlePutRequest(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			successStore := newInMemoryMapStore(map[string][]byte{
+			successStore := mustNewInMemoryMapStore(t, map[string][]byte{
 				"foo": []byte("bar"),
 			})
 			failingStore := failingStore{}
@@ -342,6 +365,15 @@ func TestHTTPServer_HandleDeleteRequest(t *testing.T) {
 			},
 		},
 		{
+			name:           "too long key returns 400 and empty body",
+			path:           fmt.Sprintf("/?key=%s", strings.Repeat("a", MaxKeyLength+1)),
+			storeType:      success,
+			wantStatusCode: http.StatusBadRequest,
+			wantHeader: map[string][]string{
+				headerKeyMochiErrorCode: {headerValueKeyTooLarge},
+			},
+		},
+		{
 			name:           "internal server error returns 500",
 			path:           "/?key=foo",
 			storeType:      fail,
@@ -356,7 +388,7 @@ func TestHTTPServer_HandleDeleteRequest(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			successStore := newInMemoryMapStore(map[string][]byte{
+			successStore := mustNewInMemoryMapStore(t, map[string][]byte{
 				"foo": []byte("bar"),
 			})
 			failingStore := failingStore{}

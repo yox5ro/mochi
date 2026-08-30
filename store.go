@@ -8,9 +8,9 @@ const (
 )
 
 var (
-	errNotFound     = errors.New("key not found")
-	errKeyTooLong   = errors.New("key too long")
-	errValueTooLong = errors.New("value too long")
+	errNotFound      = errors.New("key not found")
+	errKeyTooLarge   = errors.New("key too large")
+	errValueTooLarge = errors.New("value too large")
 )
 
 type Store interface {
@@ -21,14 +21,14 @@ type Store interface {
 
 func validateKeyLength(key string) error {
 	if len(key) > MaxKeyLength {
-		return errKeyTooLong
+		return errKeyTooLarge
 	}
 	return nil
 }
 
 func validateValueLength(value []byte) error {
 	if len(value) > MaxValueLength {
-		return errValueTooLong
+		return errValueTooLarge
 	}
 	return nil
 }

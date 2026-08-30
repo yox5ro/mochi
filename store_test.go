@@ -26,7 +26,7 @@ func Test_ValidateKeyLength(t *testing.T) {
 		{
 			name:    "max size + 1 key is invalid",
 			key:     strings.Repeat("a", MaxKeyLength+1),
-			wantErr: errKeyTooLong,
+			wantErr: errKeyTooLarge,
 		},
 	}
 
@@ -60,7 +60,7 @@ func Test_ValidateValueLength(t *testing.T) {
 		{
 			name:    "max size + 1 value is invalid",
 			value:   bytes.Repeat([]byte{'a'}, MaxValueLength+1),
-			wantErr: errValueTooLong,
+			wantErr: errValueTooLarge,
 		},
 	}
 
