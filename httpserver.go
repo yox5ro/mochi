@@ -1,40 +1,54 @@
 package main
 
 import (
-	"encoding/json"
 	"errors"
-	"log"
+	"fmt"
+	"io"
 	"net/http"
+	"net/url"
+	"slices"
 	"strconv"
 )
 
-type request struct {
-	Op    string `json:"op"`
-	Key   string `json:"key"`
-	Value string `json:"value"`
-}
+const (
+	headerKeyMochiErrorCode = "Mochi-Error-Code"
 
-// one of Value or Error_ will be omitted
-type response struct {
-	Value string `json:"value,omitempty"`
-	Error string `json:"error,omitempty"`
-}
+	headerValueKeyInvalid           = "key-invalid"
+	headerValueKeyNotFound          = "key-not-found"
+	headerValuePathNotFound         = "path-not-found"
+	headerValueRequestMethodInvalid = "request-method-invalid"
+	headerValueValueTooLarge        = "value-too-large"
+	headerValueInternal             = "internal"
+
+	// TODO: consider max byte size at https://github.com/yox5ro/mochi/issues/39
+	MaxValueSize = 2048
+)
+
+var errKeyInvalid = errors.New("key invalid")
 
 type httpServer struct {
 	store Store
 }
 
+func (s httpServer) serveHTTP(port int) error {
+	return http.ListenAndServe(":"+strconv.Itoa(port), s.buildMux())
+}
+
 func (s httpServer) buildMux() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("POST /{$}", s.handleReq)
+	mux.HandleFunc("GET /{$}", s.handleGetReq)
+	mux.HandleFunc("PUT /{$}", s.handlePutReq)
+	mux.HandleFunc("DELETE /{$}", s.handleDeleteReq)
 
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/" {
+			w.Header().Set(headerKeyMochiErrorCode, headerValuePathNotFound)
 			w.WriteHeader(http.StatusNotFound)
 			return
 		}
-		if r.Method != "POST" {
-			w.Header().Set("Allow", "POST")
+		if !slices.Contains([]string{http.MethodGet, http.MethodPut, http.MethodDelete}, r.Method) {
+			w.Header().Set("Allow", "GET, PUT, DELETE")
+			w.Header().Set(headerKeyMochiErrorCode, headerValueRequestMethodInvalid)
 			w.WriteHeader(http.StatusMethodNotAllowed)
 			return
 		}
@@ -42,39 +56,80 @@ func (s httpServer) buildMux() http.Handler {
 	})
 }
 
-func (s httpServer) serveHTTP(port int) error {
-	return http.ListenAndServe(":"+strconv.Itoa(port), s.buildMux())
-}
-
-func (s httpServer) handleReq(w http.ResponseWriter, r *http.Request) {
-	var value string
-	var err error
-	defer func() {
-		resp := response{}
-		if err != nil {
-			resp.Error = err.Error()
-		} else {
-			resp.Value = value
-		}
-		if encErr := json.NewEncoder(w).Encode(resp); encErr != nil {
-			log.Printf("failed to encode response: %v", resp)
-		}
-	}()
-
-	var req request
-	if err = json.NewDecoder(r.Body).Decode(&req); err != nil {
-		err = errors.New("error: invalid request")
+func (s httpServer) handleGetReq(w http.ResponseWriter, r *http.Request) {
+	key, err := extractKey(r)
+	if err != nil {
+		w.Header().Set(headerKeyMochiErrorCode, headerValueKeyInvalid)
+		w.WriteHeader(http.StatusBadRequest)
 		return
 	}
 
-	switch req.Op {
-	case "get":
-		value, err = s.store.get(req.Key)
-	case "put":
-		err = s.store.put(req.Key, req.Value)
-	case "delete":
-		err = s.store.delete(req.Key)
+	value, err := s.store.get(key)
+	switch {
+	case err == nil:
+		if _, writeErr := w.Write(value); writeErr != nil {
+			// TODO log the error
+			fmt.Println("response write failed")
+		}
+		return
+	case errors.Is(err, errNotFound):
+		w.Header().Set(headerKeyMochiErrorCode, headerValueKeyNotFound)
+		w.WriteHeader(http.StatusNotFound)
+		return
 	default:
-		err = errors.New("error: invalid request")
+		w.Header().Set(headerKeyMochiErrorCode, headerValueInternal)
+		w.WriteHeader(http.StatusInternalServerError)
 	}
+}
+
+func (s httpServer) handlePutReq(w http.ResponseWriter, r *http.Request) {
+	key, err := extractKey(r)
+	if err != nil {
+		w.Header().Set(headerKeyMochiErrorCode, headerValueKeyInvalid)
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	body := http.MaxBytesReader(w, r.Body, MaxValueSize)
+	value, err := io.ReadAll(body)
+	if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
+		w.Header().Set(headerKeyMochiErrorCode, headerValueValueTooLarge)
+		w.WriteHeader(http.StatusRequestEntityTooLarge)
+		return
+	} else if err != nil {
+		w.Header().Set(headerKeyMochiErrorCode, headerValueInternal)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	if err := s.store.put(key, value); err != nil {
+		w.Header().Set(headerKeyMochiErrorCode, headerValueInternal)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (s httpServer) handleDeleteReq(w http.ResponseWriter, r *http.Request) {
+	key, err := extractKey(r)
+	if err != nil {
+		w.Header().Set(headerKeyMochiErrorCode, headerValueKeyInvalid)
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	if err := s.store.delete(key); err == nil || errors.Is(err, errNotFound) {
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	w.Header().Set(headerKeyMochiErrorCode, headerValueInternal)
+	w.WriteHeader(http.StatusInternalServerError)
+}
+
+func extractKey(r *http.Request) (string, error) {
+	query, err := url.ParseQuery(r.URL.RawQuery)
+	if values, ok := query["key"]; !ok || len(values) != 1 || err != nil {
+		return "", errKeyInvalid
+	}
+	return query["key"][0], nil
 }

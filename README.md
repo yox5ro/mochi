@@ -43,6 +43,7 @@ If any error happens, `Mochi-Error-Code` response header will be returned.
 - `key-not-found`: value of corresponding `key` is not found
 - `path-not-found`: request path is not `/`
 - `request-method-invalid`: request path is `/`, but request method is not one of the `GET`, `PUT`, `DELETE`. In this case, `Allow: GET, PUT, DELETE` header will also be returned
+- `value-too-large`: put request, but request size is over 2048 byte
 - `internal`: any other internal error
 
 Response body will be empty unless successful get request
@@ -75,6 +76,9 @@ When `key` is not found, the status code will be 204, since the desired final st
 400 if following conditions are all met:
 - request path is `/` and HTTP method is one of `GET`, `PUT`, `DELETE`
 - request failed with `key-invalid` error
+
+413 if following conditions are all met:
+- put request failed with `value-too-large` error
 
 500 if following conditions are all met:
 - request path is `/` and HTTP method is one of `GET`, `PUT`, `DELETE`
