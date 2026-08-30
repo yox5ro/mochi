@@ -3,7 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
-	"maps"
+	"slices"
 )
 
 var (
@@ -11,36 +11,34 @@ var (
 )
 
 type Store interface {
-	get(key string) (value string, err error)
-	put(key, value string) error
+	get(key string) ([]byte, error)
+	put(key string, value []byte) error
 	delete(key string) error
 }
 
 type InMemoryMapStore struct {
-	store map[string]string
+	store map[string][]byte
 }
 
-func newInMemoryMapStore(initialState map[string]string) InMemoryMapStore {
-	inMemoryMapStore := InMemoryMapStore{}
+func newInMemoryMapStore(initialState map[string][]byte) InMemoryMapStore {
+	inMemoryMapStore := InMemoryMapStore{store: make(map[string][]byte)}
 
-	s := maps.Clone(initialState)
-	if s == nil {
-		s = make(map[string]string)
+	for k, v := range initialState {
+		inMemoryMapStore.store[k] = slices.Clone(v)
 	}
 
-	inMemoryMapStore.store = s
 	return inMemoryMapStore
 }
 
-func (s InMemoryMapStore) get(key string) (string, error) {
+func (s InMemoryMapStore) get(key string) ([]byte, error) {
 	if v, ok := s.store[key]; ok {
-		return v, nil
+		return slices.Clone(v), nil
 	}
-	return "", fmt.Errorf("failed to get key %q: %w", key, errNotFound)
+	return nil, fmt.Errorf("failed to get key %q: %w", key, errNotFound)
 }
 
-func (s InMemoryMapStore) put(key, value string) error {
-	s.store[key] = value
+func (s InMemoryMapStore) put(key string, value []byte) error {
+	s.store[key] = slices.Clone(value)
 	return nil
 }
 
