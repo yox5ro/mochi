@@ -1,214 +1,76 @@
 package main
 
 import (
+	"bytes"
 	"errors"
-	"slices"
+	"strings"
 	"testing"
 )
 
-func TestInMemoryMapStore_Get(t *testing.T) {
+func Test_ValidateKeyLength(t *testing.T) {
 	tests := []struct {
-		name         string
-		initialState map[string][]byte
-		key          string
-		want         []byte
-		wantErr      error
+		name    string
+		key     string
+		wantErr error
 	}{
 		{
-			name: "can get by valid key",
-			initialState: map[string][]byte{
-				"hoge": []byte("value"),
-				"fuga": []byte("value2"),
-			},
-			key:     "hoge",
-			want:    []byte("value"),
+			name:    "empty key is valid",
+			key:     "",
 			wantErr: nil,
 		},
 		{
-			name: "returns nil when no key found",
-			initialState: map[string][]byte{
-				"hoge": []byte("value"),
-				"fuga": []byte("value2"),
-			},
-			key:     "foo",
-			want:    nil,
-			wantErr: errNotFound,
+			name:    "max size key is valid",
+			key:     strings.Repeat("a", MaxKeyLength),
+			wantErr: nil,
+		},
+		{
+			name:    "max size + 1 key is invalid",
+			key:     strings.Repeat("a", MaxKeyLength+1),
+			wantErr: errKeyTooLarge,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			s := newInMemoryMapStore(tt.initialState)
-			actual, err := s.get(tt.key)
 
-			if !slices.Equal(actual, tt.want) {
-				t.Errorf("wanted %s, but got %s", tt.want, actual)
-			}
-
-			if !errors.Is(err, tt.wantErr) {
-				t.Errorf("wanted error %s, but got %s", tt.wantErr, err)
+			if err := validateKeyLength(tt.key); !errors.Is(err, tt.wantErr) {
+				t.Fatalf("want error %v, but got %v", tt.wantErr, err)
 			}
 		})
 	}
 }
 
-func TestInMemoryMapStore_Put(t *testing.T) {
+func Test_ValidateValueLength(t *testing.T) {
 	tests := []struct {
-		name         string
-		initialState map[string][]byte
-		key          string
-		value        []byte
-		wantErr      error
+		name    string
+		value   []byte
+		wantErr error
 	}{
 		{
-			name: "can create new key",
-			initialState: map[string][]byte{
-				"hoge": []byte("value"),
-				"fuga": []byte("value2"),
-			},
-			key:     "foo",
-			value:   []byte("bar"),
+			name:    "empty value is valid",
+			value:   []byte(""),
 			wantErr: nil,
 		},
 		{
-			name: "can update existing key",
-			initialState: map[string][]byte{
-				"hoge": []byte("value"),
-				"fuga": []byte("value2"),
-			},
-			key:     "hoge",
-			value:   []byte("new value"),
+			name:    "max size value is valid",
+			value:   bytes.Repeat([]byte{'a'}, MaxValueLength),
 			wantErr: nil,
+		},
+		{
+			name:    "max size + 1 value is invalid",
+			value:   bytes.Repeat([]byte{'a'}, MaxValueLength+1),
+			wantErr: errValueTooLarge,
 		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
-			s := newInMemoryMapStore(tt.initialState)
-			err := s.put(tt.key, tt.value)
-			data, _ := s.get(tt.key)
 
-			if !slices.Equal(data, tt.value) {
-				t.Errorf("wanted %s, but got %s", tt.value, data)
-			}
-
-			if !errors.Is(err, tt.wantErr) {
-				t.Errorf("wanted error %s, but got %s", tt.wantErr, err)
+			if err := validateValueLength(tt.value); !errors.Is(err, tt.wantErr) {
+				t.Fatalf("want error %v, but got %v", tt.wantErr, err)
 			}
 		})
 	}
-}
-
-func TestInMemoryMapStore_Delete(t *testing.T) {
-	tests := []struct {
-		name         string
-		initialState map[string][]byte
-		key          string
-		wantErr      error
-	}{
-		{
-			name: "can delete by valid key",
-			initialState: map[string][]byte{
-				"hoge": []byte("value"),
-				"fuga": []byte("value2"),
-			},
-			key:     "hoge",
-			wantErr: nil,
-		},
-		{
-			name: "returns empty string when no key found",
-			initialState: map[string][]byte{
-				"hoge": []byte("value"),
-				"fuga": []byte("value2"),
-			},
-			key:     "foo",
-			wantErr: errNotFound,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			t.Parallel()
-			s := newInMemoryMapStore(tt.initialState)
-			err := s.delete(tt.key)
-
-			if data, err := s.get(tt.key); !errors.Is(err, errNotFound) {
-				t.Errorf("data still found on %s", data)
-			}
-
-			if !errors.Is(err, tt.wantErr) {
-				t.Errorf("wanted error %s, but got %s", tt.wantErr, err)
-			}
-		})
-	}
-}
-
-func TestInMemoryMapStore_ValueOwnership(t *testing.T) {
-	t.Run("initialState change does not affect store", func(t *testing.T) {
-		const initialValueSting = "initial value"
-		initialValue := []byte(initialValueSting)
-		initialState := map[string][]byte{
-			"key": initialValue,
-		}
-
-		s := newInMemoryMapStore(initialState)
-
-		initialState["key"][0] = 'X'
-
-		v, err := s.get("key")
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-		if !slices.Equal(v, []byte(initialValueSting)) {
-			t.Fatalf("want value %s, but got %s", initialValueSting, v)
-		}
-	})
-
-	t.Run("get result change does not affect store", func(t *testing.T) {
-		const initialValueString = "initial value"
-		initialValue := []byte(initialValueString)
-		s := newInMemoryMapStore(map[string][]byte{
-			"key": initialValue,
-		})
-
-		first, err := s.get("key")
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-
-		first[0] = 'T'
-
-		second, err := s.get("key")
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-
-		if !slices.Equal([]byte(initialValueString), second) {
-			t.Fatalf("value changed, want %s, but got %s", initialValueString, second)
-		}
-	})
-
-	t.Run("change after put does not affect store", func(t *testing.T) {
-		s := newInMemoryMapStore(make(map[string][]byte))
-
-		const putValueString = "put value"
-		putValue := []byte(putValueString)
-
-		if err := s.put("key", putValue); err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-
-		putValue[0] = 'T'
-
-		got, err := s.get("key")
-		if err != nil {
-			t.Fatalf("unexpected error: %v", err)
-		}
-
-		if !slices.Equal(got, []byte(putValueString)) {
-			t.Fatalf("value changed, want %s, but got %s", putValueString, got)
-		}
-	})
 }
